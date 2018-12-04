@@ -9,13 +9,13 @@ x_array = LinRange(-x_end,x_end,N_x)
 
 k = 1
 m = 1
-g = 7*10^8
+g = 0
 #---------------------------------------------------
 
 
 #write the guess wavefunction here
 function psi_guess(x)
-    return sin(x)
+    return x^2
 end
 
 
@@ -109,4 +109,4 @@ anim = @animate for i=1:800
     t = time_evolve(psi, i)
     plot(x_array, real(conj.(t) .* t), title = "Psi Evolved")
 end
-gif(anim, "C:/Users/Alucard/Desktop/julia/gifs/TFA_sin(x)_fps10.gif", fps = 10)
+gif(anim, "C:/Users/Alucard/Desktop/julia/gifs/SE_sin(x)_fps10.gif", fps = 10)
