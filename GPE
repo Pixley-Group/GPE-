@@ -9,13 +9,13 @@ x_array = LinRange(-x_end,x_end,N_x)
 
 k = 1
 m = 1
-g = 0
+g = 7*10^8
 #---------------------------------------------------
 
 
 #write the guess wavefunction here
 function psi_guess(x)
-    return 5
+    return sin(x)
 end
 
 
@@ -31,15 +31,14 @@ function psi_guess_array()
     return psi_guess_array
 end
 
-pga_2 = conj.(psi_guess_array()) .* psi_guess_array()
-function pot(x)
-    pot = ((k/2)*(x^2))
+function pot(x, psi)
+    pot = (k/2)*(x^2)+g*(conj(psi)*psi)
     return pot
 end
 
 
-function e_V(x)
-    return exp.(-pot(x)*(delt_t)*im)
+function e_V(x, psi)
+    return exp.(-pot(x, psi)*(delt_t)*im)
 end
 
 function e_T(n)
@@ -61,7 +60,7 @@ end
 function time_step_V(array)
     return_array = ComplexF64[]
     for x = 1:N_x
-        k_V = array[x]*e_V(x_array[x])
+        k_V = array[x]*e_V(x_array[x], array[x])
         push!(return_array, k_V)
     end
     return return_array
@@ -85,7 +84,6 @@ end
 
 function time_evolve(array, t)
     evolved_array = reduce((x, y) -> time_evolve_step(x), 1:t, init=array)
-    return evolved_array
 end
 
 function normalize(array)
@@ -99,10 +97,16 @@ using Plots
 #plots guess psi
 psi = psi_guess_array()
 time_step = time_evolve_step(psi)
-t = time_evolve(psi, 400)
+t = time_evolve(psi, 1000)
 t_2 = conj.(t) .* t
 
 #plot(x_array, psi_guess_array(), title = "Guess Psi")
 #plot(x_array, time_step, title = "Time step")
 
-plot(x_array, real(t_2), title = "Psi Evolved")
+#plot(x_array, real(t_2), title = "Psi Evolved")
+
+anim = @animate for i=1:800
+    t = time_evolve(psi, i)
+    plot(x_array, real(conj.(t) .* t), title = "Psi Evolved")
+end
+gif(anim, "C:/Users/Alucard/Desktop/julia/gifs/TFA_sin(x)_fps10.gif", fps = 10)
