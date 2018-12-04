@@ -17,7 +17,9 @@ x_array = LinRange(-x_end,x_end,N_x)
 #physical constants
 k = 1
 m = 1
+#strength of particle-particle interactions (coupling parameter)
 g = 5*10^5
+#number of particles
 N = 10^3
 #---------------------------------------------------
 
