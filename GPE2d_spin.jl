@@ -1,4 +1,4 @@
-#Library of functions for solving the 2D GPE.
+#Library of functions for solving the 2D GPE with SOC Hamiltonian.
 
 #input parameters--------------------------
 
@@ -48,7 +48,7 @@ function psi_guess_array(psi_guess_array, n)
     for x in 1:n
         for y in 1:n
             psi_guess_array[x,y,1] = psi_guess(x,y,1)
-            psi_guess_array[x,y,2] = psi_guess(x,y,2)
+            psi_guess_array[x,y,2] = 0
         end
     end
     return normalizer(psi_guess_array)
@@ -94,7 +94,7 @@ function pot_array_QP(pot_array, W, phi_x, phi_y, n, m)
 
 end
 
-pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 144, 144), .1, 0, 0, 144, 55)
+pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 144, 144), .2, 0, 0, 144, 55)
 
 #---------------KINETIC ENERGY
 
@@ -141,7 +141,7 @@ function kin_spin_matrix(spin_couple_matrix, n, del_t)
     return spin_couple_matrix
 end
 
-spin_matrix = kin_spin_matrix(zeros(ComplexF64, 144, 144, 2, 2), 144, 10^-2)
+spin_matrix = kin_spin_matrix(zeros(ComplexF64, 144, 144, 2, 2), 144, 40^-1)
 
 #exponentiates the harmonic oscilator pot energy operator elementwise
 function e_V(psi)
@@ -186,18 +186,12 @@ end
 
 
 function time_evolve_step(array, del_t, F_T, I_F_T)
-    x = fftshift(F_T*array)
-    x = time_step_T(x,144,zeros(ComplexF64, 144, 144, 2))
-    x = I_F_T*x
-    x = time_step_V(x, del_t)
-    x = fftshift(F_T*x)
-    x = time_step_T(x,144,zeros(ComplexF64, 144, 144, 2))
-    return I_F_T*x
+    return I_F_T*(time_step_T(fftshift(F_T*time_step_V(I_F_T*time_step_T(fftshift(F_T*array),144,zeros(ComplexF64, 144, 144, 2)), del_t)),144,zeros(ComplexF64, 144, 144, 2)))
 end
 
 #evolves the guess function array t steps in imaginary time
-function time_evolve(array, t, F_T, I_F_T)
-    evolved_array = reduce((x, y) -> time_evolve_step(x, F_T, I_F_T), 1:t, init=array)
+function time_evolve(array, t, F_T, I_F_T, del_t)
+    evolved_array = reduce((x, y) -> time_evolve_step(x, del_t, F_T, I_F_T), 1:t, init=array)
     return evolved_array
 end
 
@@ -211,23 +205,23 @@ function time_evolve_fast(array,t, del_t, F_T, I_F_T)
     return n_array
 end
 
-function T(x,y)
-    return [[0 sin(p_x(x)) - (im* sin(p_y(y)))]; [sin(p_x(x)) + im * sin(p_y(y)) 0]]
+function T(x,y,n)
+    return [[0 sin(p_x(x,n)) - (im* sin(p_y(y,n)))]; [sin(p_x(x,n)) + im * sin(p_y(y,n)) 0]]
 end
 
-function T_step(array, gen_array)
+function T_step(array, gen_array,n)
     for x in 1:n
         for y in 1:n
-            gen_array[x,y,:] = T(x,y)*array[x,y,:]
+            gen_array[x,y,:] = T(x,y,n)*array[x,y,:]
         end
     end
     return gen_array
 end
 
 #Finds the energy of psi
-function Energy(array)
+function Energy(array, F_T, I_F_T)
     ffts = F_T*array
-    kin = dot(array, I_F_T*T_step(ffts, zeros(ComplexF64, n, n, 2)))
+    kin = dot(array, I_F_T*T_step(ffts, zeros(ComplexF64, 144, 144, 2), 144))
     pot = dot(array, (pot_matrix_QP.*array))
     energy = kin + pot
     return kin
@@ -281,4 +275,4 @@ function Plotter(t, psi, del_t)
     plot!(array, xaxis=:log, yaxis=:log, legend = false)
 end
 
-Plotter(1000, psi_guess_array(Array{ComplexF64}(undef, 144,144,2), 144), 40^-1)
+
