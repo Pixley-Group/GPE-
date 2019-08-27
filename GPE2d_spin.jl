@@ -24,8 +24,8 @@ fib(n) = n < 2 ? n : fib(n-1) + fib(n-2)
 
 #----Enter the starting parameters here
 # Write the guess wavefunction here
-function psi_guess(x,y,z)
-    return exp(-((x-73)^2) - ((y-73)^2))
+function psi_guess(x,y)
+    return exp(-((x-45)^2) - ((y-45)^2))
 end
 
 #write the potential energy here
@@ -35,7 +35,7 @@ end
 
 #Write the Quasi-Periodic Potential Energy here
 function pot_QP(x, y, W, phi_x, phi_y, n, m)
-    return W*(cos((((2/pi)*(m/n))*x)+phi_x) + cos((((2/pi)*(m/n))*y)+phi_y))
+    return W*(cos((((2*pi)*(m/n))*(x))+phi_x) + cos((((2*pi)*(m/n))*(y))+phi_y))
 end
 
 
@@ -47,7 +47,7 @@ function psi_guess_array(psi_guess_array, n)
 
     for x in 1:n
         for y in 1:n
-            psi_guess_array[x,y,1] = psi_guess(x,y,1)
+            psi_guess_array[x,y,1] = psi_guess(x,y)
             psi_guess_array[x,y,2] = 0
         end
     end
@@ -57,7 +57,7 @@ end
 #normalizes the wavefunction array
 #array[:,:,1].* conj(array[:,:,1])) + (array[:,:,2].*conj(array[:,:,2])
 function normalizer(array)
-    s = sqrt(sum(array.*conj(array)))
+    s = sqrt(dot(array, array))
     return (array/s)
 end
 
@@ -94,7 +94,7 @@ function pot_array_QP(pot_array, W, phi_x, phi_y, n, m)
 
 end
 
-pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 144, 144), .2, 0, 0, 144, 55)
+pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 89, 89), 0.1, 0, 0, 89, 34)
 
 #---------------KINETIC ENERGY
 
@@ -141,7 +141,7 @@ function kin_spin_matrix(spin_couple_matrix, n, del_t)
     return spin_couple_matrix
 end
 
-spin_matrix = kin_spin_matrix(zeros(ComplexF64, 144, 144, 2, 2), 144, 40^-1)
+spin_matrix = kin_spin_matrix(zeros(ComplexF64, 89, 89, 2, 2), 89, 40^-1)
 
 #exponentiates the harmonic oscilator pot energy operator elementwise
 function e_V(psi)
@@ -171,7 +171,7 @@ function time_step_V(array, del_t)
     return array.*(exp.(pot_matrix_QP*(-im*del_t)))
 end
 
-#evolves the guess function array one step in imaginary time
+
 using FFTW
 using AbstractFFTs
 
@@ -186,7 +186,7 @@ end
 
 
 function time_evolve_step(array, del_t, F_T, I_F_T)
-    return I_F_T*(time_step_T(fftshift(F_T*time_step_V(I_F_T*time_step_T(fftshift(F_T*array),144,zeros(ComplexF64, 144, 144, 2)), del_t)),144,zeros(ComplexF64, 144, 144, 2)))
+    return I_F_T*(time_step_T(F_T*time_step_V(I_F_T*time_step_T(F_T*array,89,zeros(ComplexF64, 89, 89, 2)), del_t),89,zeros(ComplexF64, 89, 89, 2)))
 end
 
 #evolves the guess function array t steps in imaginary time
@@ -195,11 +195,13 @@ function time_evolve(array, t, F_T, I_F_T, del_t)
     return evolved_array
 end
 
-function time_evolve_fast(array,t, del_t, F_T, I_F_T)
+using ProgressMeter
+
+function time_evolve_fast(array, t, del_t, F_T, I_F_T)
 
     n_array = [array]
 
-    for i in 2:t
+    @progress for i in 2:t
         push!(n_array, time_evolve_step(n_array[i-1], del_t, F_T, I_F_T))
     end
     return n_array
@@ -221,58 +223,96 @@ end
 #Finds the energy of psi
 function Energy(array, F_T, I_F_T)
     ffts = F_T*array
-    kin = dot(array, I_F_T*T_step(ffts, zeros(ComplexF64, 144, 144, 2), 144))
+    kin = dot(array, I_F_T*T_step(ffts, zeros(ComplexF64, 89, 89, 2), 89))
     pot = dot(array, (pot_matrix_QP.*array))
     energy = kin + pot
     return kin
 end
 
 #spread auxillary functions
-function r(x,y)
-    return r = sqrt((x*conj(x)) + (y*conj(y)))
-end
-
-function r_2(x,y)
-    return r = (x*conj(x)) + (y*conj(y))
-end
-
-function r_array(r_array,n)
-    for x in 1:n
-        for y in 1:n
-            r_array[x,y] = r(x,y)
-        end
-    end
-    return r_array
-end
 
 function r_2_array(r_2_array,n)
     for x in 1:n
         for y in 1:n
-            r_2_array[x,y] = r_2(x,y)
+            r_2_array[x,y] = (x-45)^2 + (y-45)^2
         end
     end
     return r_2_array
 end
 
-r_matrix = r_array(zeros(144, 144), 144)
-r_2_matrix = r_2_array(zeros(144, 144), 144)
+function x_array(x_array, n)
+    for x in 1:n
+        for y in 1:n
+            x_array[x,y] = (x-45)
+        end
+    end
+    return x_array
+end
+
+function y_array(y_array, n)
+    for x in 1:n
+        for y in 1:n
+            y_array[x,y] = (y-45)
+        end
+    end
+    return y_array
+end
+
+
+r_2_matrix = r_2_array(zeros(89, 89), 89)
+x_matrix = x_array(zeros(89, 89), 89)
+y_matrix = y_array(zeros(89, 89), 89)
+
+function expec_value(array, thing)
+    return real(sum(conj(array[:,:,1]).*(thing.*array[:,:,1]))) + real(sum(conj(array[:,:,2]).*(thing.*array[:,:,2])))
+end
 
 #The spread of the wavefunction
-function spread(psi)
-
-    psi_r = conj(psi).*r_matrix.*psi
-    psi_r_2 = conj(psi).*r_2_matrix.*psi
-
-    return real(sum(psi_r_2) - (sum(psi_r))^2)
-
+function spread(array)
+    return expec_value(array, r_2_matrix) - (expec_value(array, x_matrix))^2 - (expec_value(array, y_matrix))^2
 end
 
+function functionize(psi, x, y, s)
+    return real(dot(psi[x,y,s], psi[x,y,s]))
+end
 
 #Plotters____________________________________________________
-using Plots
-function Plotter(t, psi, del_t)
-    array = spread.(time_evolve_fast(psi,t,del_t,init_FFT(zeros(ComplexF64, 144, 144, 2), 1:2),init_IFFT(zeros(ComplexF64, 144, 144, 2), 1:2)))
-    plot!(array, xaxis=:log, yaxis=:log, legend = false)
+using Plots; pyplot()
+function Plotter(psi, del_t, t)
+    x = (1:10000)/40
+    #array = load("C:/Users/Alucard/Desktop/julia/data_sets/spread_L_89_10000_1-40.jld", "data")
+    array = spread.(time_evolve_fast(psi,t,del_t,init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2),init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2)))
+    plot!(x, array, xaxis = :log, yaxis = :log)
 end
 
+using JLD
 
+function data(t, psi, del_t)
+    array = time_evolve_fast(psi,t,del_t,init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2),init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2))
+    save("C:/Users/Alucard/Desktop/julia/data_sets/density_L_89_10000_1-40.jld", "data", array)
+end
+
+# using ProgressMeter
+#
+# prog = Progress(10000,1)
+#
+# array = load("C:/Users/Alucard/Desktop/julia/data_sets/density_L_89_10000_1-40.jld", "data")
+# anim = @animate for i=1:10000
+#     x=1:89
+#     y=1:89
+#     z(x,y) = functionize(array[i], x, y,1)
+#     plot(x,y,z,st=:surface,camera=(-30,30))
+#     next!(prog)
+# end
+# gif(anim, "C:/Users/Alucard/Desktop/julia/density_anim_AD/anim_L_89_10000_1-40.gif", fps = 30)
+
+#data(10000,psi_guess_array(Array{ComplexF64}(undef, 89,89,2), 89), 40^-1)
+
+#Plotter(psi_guess_array(Array{ComplexF64}(undef, 89,89,2), 89), 40^-1, 10000)
+
+
+#function time_evolve(array, t, F_T, I_F_T)
+#psi = psi_guess_array(Array{ComplexF64}(undef, 89,89,2),89)
+#x = time_evolve(psi_guess_array(Array{ComplexF64}(undef, 89,89,2),89), 100, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2),init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2), 40^-1)
+#Energy(psi, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2), init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2))
+#Energy(x, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2), init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2))
