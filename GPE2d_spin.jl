@@ -44,7 +44,6 @@ end
 using LinearAlgebra, Statistics, Compat
 #generates the array that is the discretization of the guess function in real space
 function psi_guess_array(psi_guess_array, n)
-
     for x in 1:n
         for y in 1:n
             psi_guess_array[x,y,1] = psi_guess(x,y)
@@ -83,7 +82,6 @@ end
 
 
 function pot_array_QP(pot_array, W, phi_x, phi_y, n, m)
-
     for i in 1:n
         for j in 1:n
             pot_array[i,j] = pot_QP(i, j, W, phi_x, phi_y, n, m)
@@ -94,7 +92,7 @@ function pot_array_QP(pot_array, W, phi_x, phi_y, n, m)
 
 end
 
-pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 89, 89), 0.1, 0, 0, 89, 34)
+pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 89, 89), 0, 0, 0, 89, 34)
 
 #---------------KINETIC ENERGY
 
@@ -185,24 +183,24 @@ end
 
 
 
-function time_evolve_step(array, del_t, F_T, I_F_T)
-    return I_F_T*(time_step_T(F_T*time_step_V(I_F_T*time_step_T(F_T*array,89,zeros(ComplexF64, 89, 89, 2)), del_t),89,zeros(ComplexF64, 89, 89, 2)))
+function time_evolve_step(array, del_t)
+    return init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2)*(time_step_T(init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2)*time_step_V(init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2)*time_step_T(init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2)*array,89,zeros(ComplexF64, 89, 89, 2)), del_t),89,zeros(ComplexF64, 89, 89, 2)))
 end
 
 #evolves the guess function array t steps in imaginary time
-function time_evolve(array, t, F_T, I_F_T, del_t)
-    evolved_array = reduce((x, y) -> time_evolve_step(x, del_t, F_T, I_F_T), 1:t, init=array)
+function time_evolve(array, t, del_t)
+    evolved_array = reduce((x, y) -> time_evolve_step(x, del_t), 1:t, init=array)
     return evolved_array
 end
 
 using ProgressMeter
 
-function time_evolve_fast(array, t, del_t, F_T, I_F_T)
+function time_evolve_fast(array, t, del_t)
 
     n_array = [array]
 
     @progress for i in 2:t
-        push!(n_array, time_evolve_step(n_array[i-1], del_t, F_T, I_F_T))
+        push!(n_array, time_evolve_step(n_array[i-1], del_t))
     end
     return n_array
 end
@@ -221,12 +219,11 @@ function T_step(array, gen_array,n)
 end
 
 #Finds the energy of psi
-function Energy(array, F_T, I_F_T)
-    ffts = F_T*array
-    kin = dot(array, I_F_T*T_step(ffts, zeros(ComplexF64, 89, 89, 2), 89))
-    pot = dot(array, (pot_matrix_QP.*array))
-    energy = kin + pot
-    return kin
+function Energy(array)
+    k_array = init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2)*array
+    kin = expec_value(k_array, kin_spin_matrix)
+    pot = expec_value(array, pot_matrix_QP)
+    return pot + kin
 end
 
 #spread auxillary functions
@@ -276,20 +273,34 @@ function functionize(psi, x, y, s)
     return real(dot(psi[x,y,s], psi[x,y,s]))
 end
 
+function pot_error(t)
+
+    n_array = [psi]
+
+    @progress for i in 2:t
+        push!(n_array, time_step_V(n_array[i-1], 10^-2))
+    end
+    return n_array
+end
+
 #Plotters____________________________________________________
 using Plots; pyplot()
 function Plotter(psi, del_t, t)
     x = (1:10000)/40
     #array = load("C:/Users/Alucard/Desktop/julia/data_sets/spread_L_89_10000_1-40.jld", "data")
-    array = spread.(time_evolve_fast(psi,t,del_t,init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2),init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2)))
-    plot!(x, array, xaxis = :log, yaxis = :log)
+    array = spread.(time_evolve_fast(psi,t,del_t))
+    plot(x, array, xaxis = :log, yaxis = :log)
 end
 
 using JLD
 
 function data(t, psi, del_t)
-    array = time_evolve_fast(psi,t,del_t,init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2),init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2))
+    array = time_evolve_fast(psi,t,del_t)
     save("C:/Users/Alucard/Desktop/julia/data_sets/density_L_89_10000_1-40.jld", "data", array)
+end
+
+function Norm(array)
+    return dot(array,array)
 end
 
 # using ProgressMeter
@@ -312,7 +323,15 @@ end
 
 
 #function time_evolve(array, t, F_T, I_F_T)
-#psi = psi_guess_array(Array{ComplexF64}(undef, 89,89,2),89)
+psi = psi_guess_array(Array{ComplexF64}(undef, 89,89,2),89)
+function fourier_plot(t)
+    x = 1:t
+    norm = real(Norm.(fourier(t)))
+    plot!(x, norm)
+end
+
+#fourier_plot(10000)
+
 #x = time_evolve(psi_guess_array(Array{ComplexF64}(undef, 89,89,2),89), 100, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2),init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2), 40^-1)
 #Energy(psi, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2), init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2))
 #Energy(x, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2), init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2))
