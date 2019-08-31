@@ -24,7 +24,7 @@ function psi_guess(x,y)
     return exp(-((x-45)^2) - ((y-45)^2))
 end
 
-function psi_guess_array(psi_guess_array, n)
+function psi_guess_array_dir(psi_guess_array, n)
     for x in 1:n
         for y in 1:n
             psi_guess_array[x,y] = psi_guess(x,y)
@@ -50,7 +50,7 @@ end
 #--------------------------------------------------------------------
 
 function psi_k(n)
-    return init_FFT(n, 1:2)*psi_guess_array(zeros(ComplexF64, n, n), n)
+    return init_FFT(n, 1:2)*psi_guess_array_dir(zeros(ComplexF64, n, n), n)
 end
 
 function psi_k_t(array, n, t)

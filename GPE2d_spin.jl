@@ -53,6 +53,15 @@ function psi_guess_array(psi_guess_array, n)
     return normalizer(psi_guess_array)
 end
 
+function psi_guess_array_dir(psi_guess_array, n)
+    for x in 1:n
+        for y in 1:n
+            psi_guess_array[x,y] = psi_guess(x,y)
+        end
+    end
+    return normalizer(psi_guess_array)
+end
+
 #normalizes the wavefunction array
 #array[:,:,1].* conj(array[:,:,1])) + (array[:,:,2].*conj(array[:,:,2])
 function normalizer(array)
@@ -173,12 +182,12 @@ end
 using FFTW
 using AbstractFFTs
 
-function init_FFT(A, region)
-    return plan_fft(A,region; flags=FFTW.PATIENT, timelimit=Inf)
+function init_FFT(n, region)
+    return plan_fft(zeros(ComplexF64, n, n),region; flags=FFTW.PATIENT, timelimit=Inf)
 end
 
-function init_IFFT(A, region)
-    return plan_ifft(A,region; flags=FFTW.PATIENT, timelimit=Inf)
+function init_IFFT(n, region)
+    return plan_ifft(zeros(ComplexF64, n, n, 2),region; flags=FFTW.PATIENT, timelimit=Inf)
 end
 
 
@@ -231,7 +240,7 @@ end
 function r_2_array(r_2_array,n)
     for x in 1:n
         for y in 1:n
-            r_2_array[x,y] = (x-45)^2 + (y-45)^2
+            r_2_array[x,y] = (x)^2 + (y)^2
         end
     end
     return r_2_array
@@ -240,7 +249,7 @@ end
 function x_array(x_array, n)
     for x in 1:n
         for y in 1:n
-            x_array[x,y] = (x-45)
+            x_array[x,y] = (x)
         end
     end
     return x_array
@@ -249,7 +258,7 @@ end
 function y_array(y_array, n)
     for x in 1:n
         for y in 1:n
-            y_array[x,y] = (y-45)
+            y_array[x,y] = (y)
         end
     end
     return y_array
@@ -283,13 +292,55 @@ function pot_error(t)
     return n_array
 end
 
+#DIRECT INTEGRATION FUNCTIONS__________________________________________________
+
+#Buildss the Hamiltonian-------------------------------------------
+function Ham_up(k_x, k_y, t)
+    cos(sqrt(sin(k_x)^2 + sin(k_y)^2)*t)
+end
+
+function Ham_down(k_x, k_y, t)
+    if sin(k_x)^2 + sin(k_y)^2 == 0
+        return 0
+    else
+        return ((sin(k_y) - im*sin(k_x))*sin(sqrt(sin(k_x)^2 + sin(k_y)^2)*t))/(sqrt(sin(k_x)^2 + sin(k_y)^2))
+    end
+end
+
+#Builds psi--------------------------------------------------------------------
+
+function psi_k(n)
+    return init_FFT(n, 1:2)*psi_guess_array_dir(zeros(ComplexF64, n, n), n)
+end
+
+function psi_k_t(array, n, t)
+    for x in 1:n
+        for y in 1:n
+            array[x,y,1] = psi_k(n)[x,y]*Ham_up(x,y,t)
+
+            array[x,y,2] = psi_k(n)[x,y]*Ham_down(x,y,t)
+        end
+    end
+    return array
+end
+
+x_dummy = zeros(ComplexF64, 89, 89, 2)
+
+function psi_x_t(n, t)
+    return init_IFFT(n, 1:2)*psi_k_t(x_dummy, n, t)
+end
+#______________________________________________________________________________
+
 #Plotters____________________________________________________
-using Plots; pyplot()
-function Plotter(psi, del_t, t)
+using Plots
+function Plotter(t)
     x = (1:10000)/40
+    array = []
+    @progress for i in 1:t
+        push!(array, spread(psi_x_t(89, i)))
+    end
     #array = load("C:/Users/Alucard/Desktop/julia/data_sets/spread_L_89_10000_1-40.jld", "data")
-    array = spread.(time_evolve_fast(psi,t,del_t))
-    plot(x, array, xaxis = :log, yaxis = :log)
+    plot!(x, array, xaxis = :log, yaxis = :log)
 end
 
 using JLD
@@ -319,18 +370,9 @@ end
 
 #data(10000,psi_guess_array(Array{ComplexF64}(undef, 89,89,2), 89), 40^-1)
 
-#Plotter(psi_guess_array(Array{ComplexF64}(undef, 89,89,2), 89), 40^-1, 10000)
-
+Plotter(10000)
 
 #function time_evolve(array, t, F_T, I_F_T)
-psi = psi_guess_array(Array{ComplexF64}(undef, 89,89,2),89)
-function fourier_plot(t)
-    x = 1:t
-    norm = real(Norm.(fourier(t)))
-    plot!(x, norm)
-end
-
-#fourier_plot(10000)
 
 #x = time_evolve(psi_guess_array(Array{ComplexF64}(undef, 89,89,2),89), 100, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2),init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2), 40^-1)
 #Energy(psi, init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2), init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2))
