@@ -183,17 +183,23 @@ using FFTW
 using AbstractFFTs
 
 function init_FFT(n, region)
-    return plan_fft(zeros(ComplexF64, n, n),region; flags=FFTW.PATIENT, timelimit=Inf)
+    return plan_fft(zeros(ComplexF64, n, n, 2),region; flags=FFTW.PATIENT, timelimit=Inf)
+end
+
+function init_FFT_dir(n)
+    return plan_fft(zeros(ComplexF64, n, n); flags=FFTW.PATIENT, timelimit=Inf)
 end
 
 function init_IFFT(n, region)
     return plan_ifft(zeros(ComplexF64, n, n, 2),region; flags=FFTW.PATIENT, timelimit=Inf)
 end
 
+FFT = init_FFT(89, 1:2)
 
+IFFT = init_IFFT(89, 1:2)
 
 function time_evolve_step(array, del_t)
-    return init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2)*(time_step_T(init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2)*time_step_V(init_IFFT(zeros(ComplexF64, 89, 89, 2), 1:2)*time_step_T(init_FFT(zeros(ComplexF64, 89, 89, 2), 1:2)*array,89,zeros(ComplexF64, 89, 89, 2)), del_t),89,zeros(ComplexF64, 89, 89, 2)))
+    return IFFT*(time_step_T(FFT*time_step_V(IFFT*time_step_T(FFT*array,89,x_dummy), del_t),89,x_dummy))
 end
 
 #evolves the guess function array t steps in imaginary time
@@ -308,38 +314,51 @@ function Ham_down(k_x, k_y, t)
 end
 
 #Builds psi--------------------------------------------------------------------
-
-function psi_k(n)
-    return init_FFT(n, 1:2)*psi_guess_array_dir(zeros(ComplexF64, n, n), n)
+function psi_guess_array_dir(psi_guess_array, n)
+    for x in 1:n
+        for y in 1:n
+            psi_guess_array[x,y,1] = psi_guess(x,y)
+            psi_guess_array[x,y,2] = 0
+        end
+    end
+    return normalizer(psi_guess_array)
 end
+
+x_dummy = zeros(ComplexF64, 89, 89, 2)
+psi_k_ = FFT*psi_guess_array_dir(x_dummy, 89)
+
 
 function psi_k_t(array, n, t)
     for x in 1:n
         for y in 1:n
-            array[x,y,1] = psi_k(n)[x,y]*Ham_up(x,y,t)
+            array[x,y,1] = psi_k_[x,y,1]*Ham_up(p_x(x,n),p_y(y,n),t)
 
-            array[x,y,2] = psi_k(n)[x,y]*Ham_down(x,y,t)
+            array[x,y,2] = psi_k_[x,y,1]*Ham_down(p_x(x,n),p_y(y,n),t)
         end
     end
     return array
 end
 
-x_dummy = zeros(ComplexF64, 89, 89, 2)
-
 function psi_x_t(n, t)
-    return init_IFFT(n, 1:2)*psi_k_t(x_dummy, n, t)
+    return IFFT*psi_k_t(x_dummy, n, t)
 end
 #______________________________________________________________________________
 
 #Plotters____________________________________________________
 using Plots
-function Plotter(t)
-    x = (1:10000)/40
-    array = []
+function Plotter_dir(t)
+    x = (1:t)/40
+    array = Float64[]
     @progress for i in 1:t
-        push!(array, spread(psi_x_t(89, i)))
+        push!(array, spread(psi_x_t(89, i/40)))
     end
     #array = load("C:/Users/Alucard/Desktop/julia/data_sets/spread_L_89_10000_1-40.jld", "data")
+    plot(x, array, xaxis = :log, yaxis = :log)
+end
+
+function Plotter(t)
+    x = (1:t)/40
+    array = spread.(time_evolve_fast(psi_guess_array(x_dummy, 89), t, 40^-1))
     plot!(x, array, xaxis = :log, yaxis = :log)
 end
 
@@ -370,7 +389,7 @@ end
 
 #data(10000,psi_guess_array(Array{ComplexF64}(undef, 89,89,2), 89), 40^-1)
 
-Plotter(10000)
+Plotter(1000)
 
 #function time_evolve(array, t, F_T, I_F_T)
 

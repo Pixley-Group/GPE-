@@ -32,6 +32,8 @@ function psi_guess_array_dir(psi_guess_array, n)
     end
     return normalizer(psi_guess_array)
 end
+
+psi_dir = psi_guess_array_dir(zeros(ComplexF64, 89, 89),89)
 #------------------------------------------------------------------
 
 #Buildss the Hamiltonian-------------------------------------------
@@ -48,24 +50,22 @@ function Ham_down(k_x, k_y, t)
 end
 
 #--------------------------------------------------------------------
-
-function psi_k(n)
-    return init_FFT(n, 1:2)*psi_guess_array_dir(zeros(ComplexF64, n, n), n)
-end
+psi_k = init_FFT(89, 1:2)*psi_dir
+IFFT = init_IFFT(89, 1:2)
 
 function psi_k_t(array, n, t)
     for x in 1:n
         for y in 1:n
-            array[x,y,1] = psi_k(n)[x,y]*Ham_up(x,y,t)
+            array[x,y,1] = psi_k[x,y]*Ham_up(x,y,t)
 
-            array[x,y,2] = psi_k(n)[x,y]*Ham_down(x,y,t)
+            array[x,y,2] = psi_k[x,y]*Ham_down(x,y,t)
         end
     end
     return array
 end
 
 function psi_x_t(n, t)
-    return init_IFFT(n, 1:2)*psi_k_t(zeros(ComplexF64, 89, 89, 2), n, t)
+    return IFFT*psi_k_t(zeros(ComplexF64, 89, 89, 2), n, t)
 end
 
 #expec_value-------------------------------------------------------------
@@ -96,6 +96,10 @@ function r_2_array(r_2_array,n)
     return r_2_array
 end
 
+r_2_matrix = r_2_array(zeros(89, 89), 89)
+x_matrix = x_array(zeros(89, 89), 89)
+y_matrix = y_array(zeros(89, 89), 89)
+
 function expec_value(array, thing)
     return real(sum(conj(array[:,:,1]).*(thing.*array[:,:,1]))) + real(sum(conj(array[:,:,2]).*(thing.*array[:,:,2])))
 end
@@ -103,3 +107,14 @@ end
 function spread(array)
     return expec_value(array, r_2_matrix) - (expec_value(array, x_matrix))^2 - (expec_value(array, y_matrix))^2
 end
+
+using ProgressMeter
+using Plots
+function Plotter(t)
+    x = (1:t)/40
+    z(x) = spread(psi_x_t(89,x))
+    #array = load("C:/Users/Alucard/Desktop/julia/data_sets/spread_L_89_10000_1-40.jld", "data")
+    plot!(x, z, xaxis = :log, yaxis = :log)
+end
+
+Plotter(1000)
