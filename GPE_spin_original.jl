@@ -60,7 +60,7 @@ end
 #array[:,:,1].* conj(array[:,:,1])) + (array[:,:,2].*conj(array[:,:,2])
 function normalizer(array)
     s = sqrt(dot(array, array))
-    return (1000*array/s)
+    return (10000*array/s)
 end
 
 #-----------------POTENTIAL ENERGY
