@@ -20,11 +20,12 @@ fib(n) = n < 2 ? n : fib(n-1) + fib(n-2)
 # Write the guess wavefunction here
 function psi_guess(x,y)
     return exp(-((x-72)^2) - ((y-72)^2))
+    #return (x-72)-((x-72)^2)+(x-72)^3
 end
 
 #write the potential energy here
-function pot_H_O(x,y,m,omega)
-    pot = m*(omega^2)*(x^2)+(y^2)
+function pot_H_O(x,y,M,omega)
+    return (M/2)*(omega^2)*(((x-72)^2)+((y-72)^2))
 end
 
 #Write the Quasi-Periodic Potential Energy here
@@ -59,30 +60,20 @@ end
 #normalizes the wavefunction array
 #array[:,:,1].* conj(array[:,:,1])) + (array[:,:,2].*conj(array[:,:,2])
 function normalizer(array)
-    s = sqrt(dot(array, array))
-    return (10000*array/s)
+    return array/sqrt(dot(array, array))
 end
 
 #-----------------POTENTIAL ENERGY
 
 #Generates the potential energy array
-function pot_array_H_O(psi, pot_array)
-
+function pot_array_H_O(n, pot_array, M, omega)
     for i in 1:n
         for j in 1:n
-            pot_array[i,j] = pot_H_O(x_array[i], y_array[j])
+            pot_array[i,j] = pot_H_O(i, j, M, omega)
         end
     end
-
-    psi = psi[:,:,1]+psi[:,:,2]
-    psi = reshape(psi, n, n)
-
-    pot_array = pot_array+g*(conj(psi).*psi)
     return pot_array
-
 end
-
-
 
 function pot_array_QP(pot_array, W, phi_x, phi_y, n, m)
     for i in 1:n
@@ -141,7 +132,7 @@ function kin_spin_matrix(spin_couple_matrix, n, del_t)
     return spin_couple_matrix
 end
 
-spin_matrix = kin_spin_matrix(zeros(ComplexF64, 144, 144, 2, 2), 144, -im*40^-1)
+spin_matrix = kin_spin_matrix(zeros(ComplexF64, 233, 233, 2, 2), 233, (40^-1))
 
 #exponentiates the harmonic oscilator pot energy operator elementwise
 function e_V(psi)
@@ -166,13 +157,16 @@ function time_step_T(array,n, gen_array)
     return gen_array
 end
 
-#evolves psi delt_t in time with the PE operator
-function time_step_V(array, del_t, pot_matrix_QP, g)
-    array[:,:,1] = array[:,:,1].*(exp.((-im*del_t)*(pot_matrix_QP + (g*(conj(array[:,:,1]).*array[:,:,1])))))
-    array[:,:,2] = array[:,:,2].*(exp.((-im*del_t)*(pot_matrix_QP + (g*(conj(array[:,:,2]).*array[:,:,2])))))
-    return array
+function interactions(g, array, spin, del_t)
+    exp.(g*(233^2)*(-im*del_t)*(conj.(array[:,:,spin]).*array[:,:,spin]))
 end
 
+#evolves psi delt_t in time with the PE operator
+function time_step_V(array, del_t, pot_matrix_QP, pot_matrix_HO, g)
+    array[:,:,1] = array[:,:,1].*exp.((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, 1, del_t)
+    array[:,:,2] = array[:,:,2].*exp.((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, 2, del_t)
+    return array
+end
 
 using FFTW
 using AbstractFFTs
@@ -189,12 +183,12 @@ function init_IFFT(n, region)
     return plan_ifft(zeros(ComplexF64, n, n, 2),region; flags=FFTW.PATIENT, timelimit=Inf)
 end
 
-FFT = init_FFT(144, 1:2)
+FFT = init_FFT(233, 1:2)
 
-IFFT = init_IFFT(144, 1:2)
+IFFT = init_IFFT(233, 1:2)
 
-function time_evolve_step(array, del_t, pot_matrix_QP, g)
-    return IFFT*(time_step_T(FFT*time_step_V(IFFT*time_step_T(FFT*array,144,x_dummy), del_t, pot_matrix_QP, g),144,x_dummy))
+function time_evolve_step(array, del_t, pot_matrix_QP, pot_matrix_HO, g)
+    return IFFT*(time_step_T(FFT*time_step_V(IFFT*time_step_T(FFT*array,233,x_dummy), del_t, pot_matrix_QP, pot_matrix_HO, g),233,x_dummy))
 end
 
 #evolves the guess function array t steps in imaginary time
@@ -205,14 +199,28 @@ end
 
 using ProgressMeter
 
-function time_evolve_fast(array, t, del_t, pot_matrix_QP, g)
+function time_evolve_fast(array, t, del_t, pot_matrix_QP, pot_matrix_HO, g)
 
     n_array = [array]
 
     @progress for i in 2:t
-        push!(n_array, time_evolve_step(n_array[i-1], del_t, pot_matrix_QP, g))
+        push!(n_array, time_evolve_step(n_array[i-1], del_t, pot_matrix_QP, pot_matrix_HO, g))
     end
     return n_array
+end
+
+function spread_fast(array, t, del_t, pot_matrix_QP, pot_matrix_HO, g)
+
+    n_array = [array]
+    spread_array = [spread(array)]
+
+    @progress for i in 2:t
+        array = time_evolve_step(n_array[1], del_t, pot_matrix_QP, pot_matrix_HO, g)
+        push!(n_array, array)
+        push!(spread_array, spread(array))
+        popfirst!(n_array)
+    end
+    return spread_array
 end
 
 function T(x,y,n)
@@ -230,7 +238,7 @@ end
 
 #Finds the energy of psi
 function Energy(array)
-    k_array = init_FFT(zeros(ComplexF64, 144, 144, 2), 1:2)*array
+    k_array = init_FFT(zeros(ComplexF64, 233, 233, 2), 1:2)*array
     kin = expec_value(k_array, kin_spin_matrix)
     pot = expec_value(array, pot_matrix_QP)
     return pot + kin
@@ -266,9 +274,9 @@ function y_array(y_array, n)
 end
 
 
-r_2_matrix = r_2_array(zeros(144, 144), 144)
-x_matrix = x_array(zeros(144, 144), 144)
-y_matrix = y_array(zeros(144, 144), 144)
+r_2_matrix = r_2_array(zeros(233, 233), 233)
+x_matrix = x_array(zeros(233, 233), 233)
+y_matrix = y_array(zeros(233, 233), 233)
 
 function expec_value(array, thing)
     return real(sum(conj(array[:,:,1]).*(thing.*array[:,:,1]))) + real(sum(conj(array[:,:,2]).*(thing.*array[:,:,2])))
@@ -288,7 +296,7 @@ function pot_error(t)
     n_array = [psi]
 
     @progress for i in 2:t
-        push!(n_array, time_step_V(n_array[i-1], 10^-2))
+        push!(n_array, time_step_V(n_array[i-1], 10^-3))
     end
     return n_array
 end
@@ -319,8 +327,8 @@ function psi_guess_array_dir(psi_guess_array, n)
     return normalizer(psi_guess_array)
 end
 
-x_dummy = zeros(ComplexF64, 144, 144, 2)
-psi_k_ = FFT*psi_guess_array_dir(x_dummy, 144)
+x_dummy = zeros(ComplexF64, 233, 233, 2)
+psi_k_ = FFT*psi_guess_array_dir(x_dummy, 233)
 
 
 function psi_k_t(array, n, t)
@@ -340,14 +348,13 @@ end
 #______________________________________________________________________________
 
 #Plotters____________________________________________________
-using Plots
 function Plotter_dir(t)
     x = (1:t)/40
     array = Float64[]
     @progress for i in 1:t
-        push!(array, spread(psi_x_t(144, i/40)))
+        push!(array, spread(psi_x_t(233, i/40)))
     end
-    #array = load("C:/Users/Alucard/Desktop/julia/data_sets/spread_L_144_10000_1-40.jld", "data")
+    #array = load("C:/Users/Alucard/Desktop/julia/data_sets/spread_L_233_10000_1-40.jld", "data")
     plot(x, array, xaxis = :log, yaxis = :log)
 end
 
@@ -355,29 +362,39 @@ using DataFrames
 using GLM
 function Plotter(t)
     x = (1:t)/40
-                                #(pot_array, W, phi_x, phi_y, n, m)
-    pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 144, 144), .1, 0, 0, 144, 55)
-    #(array, t, del_t, pot_matrix_QP, g)
-    array = spread.(time_evolve_fast(psi_guess_array(x_dummy, 144), t, pot_matrix_QP, -im*40^-1, 0))
-    plot(x, array)
+    pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 233, 233), 0.1, 0, 0, 233, 89)
+    pot_matrix_HO = pot_array_H_O(233, zeros(ComplexF64, 233, 233), 0, 0)
+    array = spread.(time_evolve_fast(psi_guess_array(x_dummy, 233), t, 40^-1,  pot_matrix_QP, pot_matrix_HO, 0))
+    plot(x, array, xaxis = :log, yaxis = :log)
     #data = DataFrame(A = x[400:t], B = array[400:t])
     #linear = glm(@formula(log(B) ~ log(A)), data, Normal(), IdentityLink())
     # t = (1:10000)/40
     # x = [.1,.15,.2,.25,.3,.35,.4,.45,.5,.52,.54,.56,.6,.65,.7,.75,.8,.85,.9]
     # for i in 1:19
-    #     array = load("D:/GPE_data/L_144_spread/spread_L_144_10000_1-40_W_$(x[i]).jld", "data")
+    #     array = load("D:/GPE_data/L_233_spread/spread_L_233_10000_1-40_W_$(x[i]).jld", "data")
     #     plot!(t, array, xaxis = :log, yaxis = :log)
     # end
 end
 
 using JLD
 
+function data_amarel(t)
+    x = [.1,.15,.2,.25,.3,.35,.4,.45,.5,.52,.54,.56,.6,.65,.7,.75,.8,.85,.9]
+    for i in 1:19
+        pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 233, 233), 0, 0, 0, 233, 89)
+        pot_matrix_HO = pot_array_H_O(233, zeros(ComplexF64, 233, 233), 0, 0)
+        array = spread.(time_evolve_fast(psi_guess_array(x_dummy, 233), t, 40^-1,  pot_matrix_QP, pot_matrix_HO, x[i]))
+        save("D:/GPE_data/L_233_spread_W_0_N_1/N-1_W-0_g_$(x[i]).jld", "data", array)
+    end
+end
+
 function data(t)
     x = [.1,.15,.2,.25,.3,.35,.4,.45,.5,.52,.54,.56,.6,.65,.7,.75,.8,.85,.9]
     for i in 1:19
-        pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 144, 144), x[i], 0, 0, 144, 55)
-        array = spread.(time_evolve_fast(psi_guess_array(x_dummy, 144), t, -im*40^-1, pot_matrix_QP))
-        save("D:/GPE_data/spread_L_144_10000_1-40_W_$(x[i]).jld", "data", array)
+        pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 233, 233), x[i], 0, 0, 233, 89)
+        pot_matrix_HO = pot_array_H_O(233, zeros(ComplexF64, 233, 233), 0, 0)
+        array = spread.(time_evolve_fast(psi_guess_array(x_dummy, 233), t, 40^-1,  pot_matrix_QP, pot_matrix_HO, 0.2))
+        save("D:/GPE_data/L_233_spread_g_0.2/W_$(x[i])_g_0.2.jld", "data", array)
     end
 end
 
@@ -385,54 +402,128 @@ function lin_data()
     x = [.1,.15,.2,.25,.3,.35,.4,.45,.5,.52,.54,.56,.6,.65,.7,.75,.8,.85,.9]
     t = (1:10000)/40
     m_array = Float64[]
+    m_array2 = Float64[]
     for i in 1:19
-        array = load("D:/GPE_data/L_144_spread/spread_L_144_10000_1-40_W_$(x[i]).jld", "data")
-        data = DataFrame(A = t[400:4000], B = array[400:4000])
+        array = load("C:/Users/Kyle/Desktop/julia/data/L=233_N=233_W=0/N=234_W=0_g=$(x[i]).jld", "data")
+        #array2 = load("D:/GPE_data/L_233_spread_g_0.1/W_$(x[i])_g_0.2.jld", "data")
+        data = DataFrame(A = t[40:1000], B = array[40:4000])
+        #data2 = DataFrame(A2 = t[40:1000], B2 = array2[40:1000])
         linear = glm(@formula(log(B) ~ log(A)), data, Normal(), IdentityLink())
+        #linear2 = glm(@formula(log(B2) ~ log(A2)), data2, Normal(), IdentityLink())
         m = coef(linear)[2]
+        m2 = coef(linear2)[2]
         push!(m_array,m)
-        #save("D:/GPE_data/L_144_spread_lin_fit/spread_L_144_1-40_W_$(x[i])_lin_fit.jld", "data", array)
+        push!(m_array2,m2)
+        #save("D:/GPE_data/L_233_spread_lin_fit/spread_L_233_1-40_W_$(x[i])_lin_fit.jld", "data", array)
     end
     y = [1.82,1.75,1.66, 1.56, 1.47, 1.35, 1.25, 1.15, 1.12, 1.12, 1.12, 1.13, 1.17, 1.23, 1.3, 1.37, 1.41, 1.44, 1.46]
     scatter(x, m_array, title ="2/z vs. W Plot", xlabel = "W", ylabel = "2/z", markerstrokecolor = :black)
     plot!(x, m_array)
     plot!(x, y)
+    plot!(x, m_array2)
+end
+
+function spread(i)
+    x = [.1,.15,.2,.25,.3,.35,.4,.45,.5,.52,.54,.56,.6,.65,.7,.75,.8,.85,.9]
+    t = (1:10000)/40
+    m_array = Float64[]
+    m_array2 = Float64[]
+
+    # array = load("D:/GPE_data/L_233_spread_g_0.2/W_$(x[i])_g_0.2.jld", "data")
+    # array2 = load("D:/GPE_data/L_233_spread_g_0.1/W_$(x[i])_g_0.2.jld", "data")
+
+    plot(t, array, xaxis = :log, yaxis = :log)
+    plot!(t, array2, xaxis = :log, yaxis = :log)
 end
 
 function Norm(array)
     return dot(array,array)
 end
 
-function E_Plot(t)
-    x = 1:144
-    y = 1:144
-    #(pot_array, W, phi_x, phi_y, n, m)
-    pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 144, 144), 0, 0, 0, 144, 55)
-    #(array, t, del_t, pot_matrix_QP, g)
-    array = time_evolve_fast(psi_guess_array(x_dummy, 144), t, -im*40^-1,  pot_matrix_QP, 1000)[t]
-    arra = array[:,:,1]
-    z(x,y) = conj(arra[x,y]).*arra[x,y]
 
-    surface(x,y,z)
+
+
+using Plots
+import PyPlot
+using Distributions
+using LinearAlgebra
+#pygui(true)
+#.54,.56,.6,.65,.7,.75,.8,.85,.9
+function spread_data()
+    y = ["20^-1", "40^-1", "10^-2", "20^-2"]
+    x = ['1', '2', '3', '4']
+    t = [(1:20000)/20,(1:40000)/40, (1:100000)/100, (1:200000)/200]
+    for i in 1:4
+        array = load("C:/Users/Kyle/Desktop/julia/data/L=233_N=1_W=0_$(y[i])/$(y[i])_N=1_W=0_g=0.2.jld", "data")
+        t = t[i]
+        plot!(array, fmt = :png, xlabel = "iterations", ylabel = "<del r^2>", label = "$(y[i])", title = "Spread Plot (log-log) del_t=20^-1", xaxis = :log, yaxis = :log)
+    end
 end
+
+function E_Plot(t, mu)
+    pyplot()
+
+    x = (1:233)
+    y = (1:233)
+
+    #(pot_array, W, phi_x, phi_y, n, m)
+    pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 233, 233), 0.1, 0, 0, 233, 89)
+    pot_matrix_HO = pot_array_H_O(233, zeros(ComplexF64, 233, 233), 0, 0)
+    #(array, t, del_t, pot_matrix_QP, g)
+    array = spread_fast(psi_guess_array(x_dummy, 233), t, 40^-1,  pot_matrix_QP, pot_matrix_HO, .1)[t]
+    arra = normalizer(array[:,:,1])
+    arra2 = normalizer(array[:,:,2])
+    psi = psi_guess_array(x_dummy, 233)
+    z = (conj.(arra[x,y]).*arra[x,y]) + (conj.(arra2[x,y]).*arra2[x,y])
+
+    PyPlot.surf(z, rstride=2,edgecolors="k", cstride=2, alpha=1, linewidth=0.25)
+    show()
+    #z_2(x,y)= mu*ones(Float64, 233).- ((x).^2).-(y.^2)
+    #plot!(x,y,z_2, st=:surface,colors = "green", camera=(90,30))
+    # plot_surface(x, y, z_2, rstride=2,edgecolors="k", cstride=2,
+    # cmap=ColorMap("gray"), alpha=0.8, linewidth=0.25)
+
+
+    #surface!(x,y,z_2, alpha = 0.2)
+end
+
+function TF_Plot(mu)
+    x = 1:233
+    y = 1:233
+    pot_matrix_HO = pot_array_H_O(233, zeros(Float64, 233, 233), 1, 1)
+
+    z_2= (mu*ones(Float64, 233, 233) - pot_matrix_HO)/(300)
+    analytic = PyPlot.surf(x,y,z_2, rstride=2,edgecolors="k", cstride=2, alpha=0.4, linewidth=0.25)
+    show(analytic)
+end
+
+
+
+# pyplot()
+# ioff()
+# x = range(0; stop=2*pi, length=1000); y = sin.(3 * x + 4 * cos.(2 * x))
+# thing = PyPlot.plot(x, y, color="blue", linewidth=2.0, linestyle="--")
+# title("A new sinusoidally modulated sinusoid")
+#
+# show()
 
 # using ProgressMeter
 #
 # prog = Progress(10000,1)
 #
-# array = load("C:/Users/Alucard/Desktop/julia/data_sets/density_L_144_10000_1-40.jld", "data")
+# array = load("C:/Users/Alucard/Desktop/julia/data_sets/density_L_233_10000_1-40.jld", "data")
 # anim = @animate for i=1:10000
-#     x=1:144
-#     y=1:144
+#     x=1:233
+#     y=1:233
 #     z(x,y) = functionize(array[i], x, y,1)
 #     plot(x,y,z,st=:surface,camera=(-30,30))
 #     next!(prog)
 # end
-# gif(anim, "C:/Users/Alucard/Desktop/julia/density_anim_AD/anim_L_144_10000_1-40.gif", fps = 30)
+# gif(anim, "C:/Users/Alucard/Desktop/julia/density_anim_AD/anim_L_233_10000_1-40.gif", fps = 30)
 
 
 
-#data(10000,psi_guess_array(Array{ComplexF64}(undef, 144,144,2), 144), -im*40^-1)
+#data(10000,psi_guess_array(Array{ComplexF64}(undef, 233,233,2), 233), -im*40^-1)
 
 
 
@@ -441,13 +532,30 @@ end
 # plot(x,y, title ="2/z vs. W Plot", xlabel = "W", ylabel = "2/z", markerstrokecolor = :black)
 # scatter!(x,y)
 
-
-# array = load("D:/GPE_data/L_144_spread/spread_L_144_10000_1-40_W_0.9.jld", "data")
-# plot(ts, array, xaxis = :log, yaxis = :log, legend=false, title ="Spread Plot with Linear Fit for W = 0.9", xlabel = "t", ylabel = "spread")
+#ts = (1:100)/40
+#array = load("D:/GPE_data/L_233_spread_g_0.1/W_0.54_g_0.1.jld", "data")
+#plot(ts, array, legend=false, title ="Spread Plot with Linear Fit for W = 0.9", xlabel = "t", ylabel = "spread")
 # datas = DataFrame(A = ts[1000:4000], B = array[1000:4000])
 # linear = glm(@formula(log(B) ~ log(A)), datas, Normal(), IdentityLink())
-# ts = (1:10000)/40
+
 # f(x) = ((x^m))
 # plot!(f,1,250)
 # m = coef(linear)[2]
 # b = coef(linear)[1]
+
+#E_Plot(2000, 10)
+#TF_Plot(389)
+
+y = ["20^-1", "40^-1", "10^-2", "20^-2", "40^-2"]
+t = [(1:20000)/20, (1:40000)/40, (1:100000)/100, (1:200000)/400, (1:400000)/1600]
+j=1
+f = [20, 40, 100, 200, 400]
+g = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+i=1
+array = load("C:/Users/Kyle/Desktop/julia/data/L=377_N=377_W=0_$(y[j])/$(y[j])_N=377^2_W=0_g=$(g[i]).jld", "data")
+plot(t[j], array, fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "del_t = $(y[j])", title = "Spread Plot (log-log) W= 0, g = 1, N = L^2= 377^2, del_t = 20^-1", xaxis = :log, yaxis = :log)
+# # data_frame = DataFrame(A = t[j][50*f[j]:100*f[j]], B = array[50f[j]:100*f[j]])
+# linear = glm(@formula(log(B) ~ log(A)), data_frame, Normal(), IdentityLink())
+# m = coef(linear)[2]
+# b = coef(linear)[1]
+#plot!(t[j][30:1000*f[j]], ((t[j][30:1000*f[j]]*exp(b/m)).^m) , label = "2/z = $(m)", legend = :topleft)
