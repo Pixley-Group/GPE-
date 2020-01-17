@@ -163,8 +163,8 @@ end
 
 #evolves psi delt_t in time with the PE operator
 function time_step_V(array, del_t, pot_matrix_QP, pot_matrix_HO, g)
-    array[:,:,1] = array[:,:,1].*exp.((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, 1, del_t)
-    array[:,:,2] = array[:,:,2].*exp.((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, 2, del_t)
+    array[:,:,1] = exp.((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, 1, del_t).*array[:,:,1]
+    array[:,:,2] = exp.((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, 2, del_t).*array[:,:,2]
     return array
 end
 
@@ -546,16 +546,29 @@ end
 #E_Plot(2000, 10)
 #TF_Plot(389)
 
+#---
+using Plots
+using JLD
 y = ["20^-1", "40^-1", "10^-2", "20^-2", "40^-2"]
-t = [(1:20000)/20, (1:40000)/40, (1:100000)/100, (1:200000)/400, (1:400000)/1600]
-j=1
+t = [(1:400000)/20, (1:40000)/40, (1:100000)/100, (1:200000)/400, (1:400000)/1600, 1:10000]
+j = 3
 f = [20, 40, 100, 200, 400]
-g = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-i=1
-array = load("C:/Users/Kyle/Desktop/julia/data/L=377_N=377_W=0_$(y[j])/$(y[j])_N=377^2_W=0_g=$(g[i]).jld", "data")
-plot(t[j], array, fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "del_t = $(y[j])", title = "Spread Plot (log-log) W= 0, g = 1, N = L^2= 377^2, del_t = 20^-1", xaxis = :log, yaxis = :log)
-# # data_frame = DataFrame(A = t[j][50*f[j]:100*f[j]], B = array[50f[j]:100*f[j]])
-# linear = glm(@formula(log(B) ~ log(A)), data_frame, Normal(), IdentityLink())
-# m = coef(linear)[2]
-# b = coef(linear)[1]
-#plot!(t[j][30:1000*f[j]], ((t[j][30:1000*f[j]]*exp(b/m)).^m) , label = "2/z = $(m)", legend = :topleft)
+g = [0.0, 0.2, 0.4, 0.6, 0.8]
+
+plot()
+for i in 1:5
+    array = load("C:/Users/Kyle/Desktop/julia/data/L=89_N=89_W=0_.001_500,000/N=1_W=0_g=$(g[i]).jld", "data")
+    #array2 = load("C:/Users/Kyle/Desktop/julia/data/L=144_N=144_W=0_20^-1/20^-1_N=144^2_W=0_g=0.0.jld", "data")
+    #println(array[2000])
+    plot!(t[j], array[2:end].-array[1], fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "g = $(g[i])", title = "Spread Plot (log-log) W= 0, del_t=10^-2, L^2= 89^2", xaxis = :log, yaxis = :log)
+end
+#array2 = load("C:/Users/Kyle/Desktop/julia/data/L_377_spread_W=0_0.05_400000_0-0.2/0.05_N=377^2_W=0_g=0.0.jld", "data")
+#plot!(t[j], array2, fmt = :png, legend = :bottomleft, xlabel = "time", ylabel = "<del r^2>", label = "g = 0", title = "Spread Plot (log-log) W= 0, del_t=20^-1, N = L^2= 377^2", xaxis = :log, yaxis = :log)
+plot!()
+#data_frame = DataFrame(A = t[j][400*f[j]:2500*f[j]], B = array[400*f[j]:2500*f[j]])
+#linear = glm(@formula(B ~ A), data_frame, Normal(), IdentityLink())
+#m = coef(linear)[2]
+#b = coef(linear)[1]
+# plot!(t[j][1000:10000*f[j]], ((t[j][1000:10000*f[j]]*exp(b/m)).^m) , label = "2/z = $(m)", legend = :topleft)
+#plot!(t[j][3000:10000*f[j]], (t[j][3000:10000*f[j]].*m.+b), label = "2/z = $(m)", legend = :topleft)
+#---

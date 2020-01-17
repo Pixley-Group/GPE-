@@ -212,9 +212,9 @@ end
 function spread_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
 
     n_array = [array]
-    spread_array = [spread(array)]
+    spread_array = [spread(array, L)]
 
-    @progress for i in 2:t
+    for i in 2:t
         #       time_evolve_step(array, del_t, spin_matrix, g, FFT, IFFT)
         array = time_evolve_step(n_array[1], del_t, spin_matrix, g, FFT, IFFT, L)
         push!(n_array, array)
@@ -360,7 +360,7 @@ function main()
     rank = MPI.Comm_rank(comm)
     Nproc = MPI.Comm_size(comm)
 
-    data_amarel(100000, 233, rank, Nproc)
+    data_amarel(500000, 233, rank, Nproc, (10^-2))
 
     MPI.Finalize()
 end
@@ -380,18 +380,18 @@ end
     #end
 #end
 
-function data_amarel(t, L, Nproc, rank)
+function data_amarel(t, L, rank, Nproc, del_t)
 
     x = [0,.2,.4,.6,.8,1]
     #pot_matrix_QP = pot_array_QP(zeros(ComplexF64, L, L), 0, 0, 0, L, 233)
     #pot_matrix_HO = pot_array_H_O(L, zeros(ComplexF64, L, L), 0, 0)
-    spin_matrix = kin_spin_matrix(zeros(ComplexF64, L, L, 2, 2), L, (20^-2))
+    spin_matrix = kin_spin_matrix(zeros(ComplexF64, L, L, 2, 2), L, del_t)
     FFT = init_FFT(L, 1:2)
     IFFT = init_IFFT(L, 1:2)
     #time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
     #        spread_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
-    array = (spread_fast(psi_guess_array(x_dummy(L), L), t, 20^-2, spin_matrix, x[rank], FFT, IFFT, L))
-    save("/scratch/bomeisl/L_233_spread_N=1_W=0_10^-2/N=1_W=0_g=$(x[rank]).jld", "data", array)
+    array = (spread_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank], FFT, IFFT, L))
+    save("/scratch/bomeisl/L_233_spread_N=1_W=0_10^-2_500000/N=1_W=0_g=$(x[rank]).jld", "data", array)
 end
 
 # function data(t)
