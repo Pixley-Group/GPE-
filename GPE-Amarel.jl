@@ -19,7 +19,7 @@ fib(n) = n < 2 ? n : fib(n-1) + fib(n-2)
 #----Enter the starting parameters here
 # Write the guess wavefunction here
 function psi_guess(x,y)
-    return exp(-((x-116)^2) - ((y-116)^2))
+    return exp(-((x-45)^2) - ((y-45)^2))
     #return (x-72)-((x-72)^2)+(x-72)^3
 end
 
@@ -160,14 +160,14 @@ function time_step_T(array,n, gen_array, spin_matrix)
     return gen_array
 end
 
-function interactions(g, array, spin, del_t)
-    exp.(g*(-im*del_t)*(conj.(array[:,:,spin]).*array[:,:,spin]))
+function interactions(g, array, spin, del_t, L)
+    exp.(g*L^2(-im*del_t)*(conj.(array[:,:,spin]).*array[:,:,spin]))
 end
 
 #evolves psi delt_t in time with the PE operator -TOOK OUT QUASIPERIODIC POTENTIAL W=0
 function time_step_V(array, del_t, g)
-    array[:,:,1] = array[:,:,1].*interactions(g, array, 1, del_t)
-    array[:,:,2] = array[:,:,2].*interactions(g, array, 2, del_t)
+    array[:,:,1] = array[:,:,1].*interactions(g, array, 1, del_t, L)
+    array[:,:,2] = array[:,:,2].*interactions(g, array, 2, del_t, L)
     return array
 end
 
@@ -360,7 +360,7 @@ function main()
     rank = MPI.Comm_rank(comm)
     Nproc = MPI.Comm_size(comm)
 
-    data_amarel(500000, 233, rank, Nproc, (10^-2))
+    data_amarel(500000, 89, rank, Nproc, (10^-2))
 
     MPI.Finalize()
 end
