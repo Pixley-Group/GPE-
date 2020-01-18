@@ -167,6 +167,10 @@ end
 
 #evolves psi delt_t in time with the PE operator
 function time_step_V(array, del_t, pot_matrix_QP, g)
+    # These are incorrect -- they interaction should be g*(conj(array[:,:,1]).*array[:,:,1]+conj(array[:,:,2]).*array[:,:,2]) on both terms
+    # Something like:
+    # array = array.*(exp.((-im*del_t)*(pot_matrix_QP + g*(abs2.(array[:,:,1]) + abs2.(array[:,:,2])))))
+    
     array[:,:,1] = array[:,:,1].*(exp.((-im*del_t)*(pot_matrix_QP + (g*(conj(array[:,:,1]).*array[:,:,1])))))
     array[:,:,2] = array[:,:,2].*(exp.((-im*del_t)*(pot_matrix_QP + (g*(conj(array[:,:,2]).*array[:,:,2])))))
     return array
