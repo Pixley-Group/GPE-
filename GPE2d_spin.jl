@@ -30,7 +30,7 @@ end
 
 #write the potential energy here
 function pot_H_O(x, y, m, omega)
-    pot = m/2 * (omega^2) * (x^2) + (y^2)
+    pot = m/2 * (omega^2) * ((x^2) + (y^2))
 end
 
 #Write the Quasi-Periodic Potential Energy here
