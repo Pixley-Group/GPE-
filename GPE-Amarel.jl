@@ -160,14 +160,14 @@ function time_step_T(array,n, gen_array, spin_matrix)
     return gen_array
 end
 
-function interactions(g, array, spin, del_t, L)
-    exp.(g*L^2(-im*del_t)*(conj.(array[:,:,spin]).*array[:,:,spin]))
+function interactions(g, array, del_t, L)
+    exp.(g*(L^2)*(-im*del_t)*(conj.(array[:,:,1]).*array[:,:,1] + conj.(array[:,:,2]).*array[:,:,2]))
 end
 
 #evolves psi delt_t in time with the PE operator -TOOK OUT QUASIPERIODIC POTENTIAL W=0
 function time_step_V(array, del_t, g)
-    array[:,:,1] = array[:,:,1].*interactions(g, array, 1, del_t, L)
-    array[:,:,2] = array[:,:,2].*interactions(g, array, 2, del_t, L)
+    array[:,:,1] = array[:,:,1].*interactions(g, array, del_t, L)
+    array[:,:,2] = array[:,:,2].*interactions(g, array, del_t, L)
     return array
 end
 
@@ -199,12 +199,12 @@ end
 # end
 
 
-function time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
+function time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
 
     n_array = [array]
 
     for i in 2:t
-        push!(n_array, time_evolve_step(n_array[i-1], del_t, spin_matrix, g, FFT, IFFT))
+        push!(n_array, time_evolve_step(n_array[i-1], del_t, spin_matrix, g, FFT, IFFT, L))
     end
     return n_array
 end
@@ -390,8 +390,9 @@ function data_amarel(t, L, rank, Nproc, del_t)
     IFFT = init_IFFT(L, 1:2)
     #time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
     #        spread_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
-    array = (spread_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank], FFT, IFFT, L))
-    save("/scratch/bomeisl/L_233_spread_N=1_W=0_10^-2_500000/N=1_W=0_g=$(x[rank]).jld", "data", array)
+    #        time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
+    array = (time_evolve_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank], FFT, IFFT))
+    save("/scratch/bomeisl/L_$(L)_spread_W=0_$(del_t)_$(t)/L=$(L)_W=0_g=$(x[rank]).jld", "data", array)
 end
 
 # function data(t)
