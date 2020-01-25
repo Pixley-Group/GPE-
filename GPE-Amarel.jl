@@ -161,11 +161,11 @@ function time_step_T(array,n, gen_array, spin_matrix)
 end
 
 function interactions(g, array, del_t, L)
-    exp.(g*(L^2)*(-im*del_t)*(conj.(array[:,:,1]).*array[:,:,1] + conj.(array[:,:,2]).*array[:,:,2]))
+    exp.(g*(L^2)*(-im*del_t)*(abs2(array[:,:1])+abs2(array[:,:,2])))
 end
 
 #evolves psi delt_t in time with the PE operator -TOOK OUT QUASIPERIODIC POTENTIAL W=0
-function time_step_V(array, del_t, g)
+function time_step_V(array, del_t, g, L)
     array[:,:,1] = array[:,:,1].*interactions(g, array, del_t, L)
     array[:,:,2] = array[:,:,2].*interactions(g, array, del_t, L)
     return array
@@ -189,7 +189,7 @@ end
 
 
 function time_evolve_step(array, del_t, spin_matrix, g, FFT, IFFT, L)
-    return IFFT*(time_step_T(FFT*time_step_V(IFFT*time_step_T(FFT*array, L, x_dummy(L), spin_matrix), del_t, g),L,x_dummy(L), spin_matrix))
+    return IFFT*(time_step_T(FFT*time_step_V(IFFT*time_step_T(FFT*array, L, x_dummy(L), spin_matrix), del_t, g, L),L,x_dummy(L), spin_matrix))
 end
 
 #evolves the guess function array t steps in imaginary time
@@ -391,8 +391,8 @@ function data_amarel(t, L, rank, Nproc, del_t)
     #time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
     #        spread_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
     #        time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
-    array = (time_evolve_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank], FFT, IFFT))
-    save("/scratch/bomeisl/L_$(L)_spread_W=0_$(del_t)_$(t)/L=$(L)_W=0_g=$(x[rank]).jld", "data", array)
+    array = (time_evolve_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank+1], FFT, IFFT))
+    save("/scratch/bomeisl/Spread_L_$(L)_W=0_$(del_t)_$(t)/L=$(L)_W=0_g=$(x[rank+1]).jld", "data", array)
 end
 
 # function data(t)

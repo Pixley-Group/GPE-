@@ -158,7 +158,7 @@ function time_step_T(array,n, gen_array)
 end
 
 function interactions(g, array, del_t)
-    exp.(g*(233^2)*(-im*del_t)*(abs2(array[:,:1])+abs2(array[:,:,2])))
+    exp.(g*(L^2)*(-im*del_t)*(abs2(array[:,:1])+abs2(array[:,:,2])))
 end
 
 #evolves psi delt_t in time with the PE operator
@@ -454,7 +454,7 @@ function spread_data()
     x = ['1', '2', '3', '4']
     t = [(1:20000)/20,(1:40000)/40, (1:100000)/100, (1:200000)/200]
     for i in 1:4
-        array = load("C:/Users/Kyle/Desktop/julia/data/L=233_N=1_W=0_$(y[i])/$(y[i])_N=1_W=0_g=0.2.jld", "data")
+        array = load("C:/Users/Kyle/Desktop/julia/data/Spread_L=233_N=1_W=0_$(y[i])/$(y[i])_N=1_W=0_g=0.2.jld", "data")
         t = t[i]
         plot!(array, fmt = :png, xlabel = "iterations", ylabel = "<del r^2>", label = "$(y[i])", title = "Spread Plot (log-log) del_t=20^-1", xaxis = :log, yaxis = :log)
     end
@@ -551,17 +551,19 @@ using Plots
 using JLD
 #y = ["20^-1", "40^-1", "10^-2", "20^-2", "40^-2"]
 t = (1:499999)/100
-#j = 3
 f = [20, 40, 100, 200, 400]
+
 g = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+j = 3
+
 L = [89,144,233]
 
 plot()
 for i in 1:3
-    array = load("C:/Users/Kyle/Desktop/julia/data/Spread_L=$(L[i])_W=0_0.01_500000/L=$(L[i])_W=0_g=0.8.jld", "data")
+    array = load("C:/Users/Kyle/Desktop/julia/data/Spread_L=$(L[i])_W=0_0.01_500000/L=$(L[i])_W=0_g=$(g[j]).jld", "data")
     #array2 = load("C:/Users/Kyle/Desktop/julia/data/L=144_N=144_W=0_20^-1/20^-1_N=144^2_W=0_g=0.0.jld", "data")
     println(array[1])
-    plot!(t, array[2:end].-array[1], fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "L = $(L[i])", title = "Spread Plot (log-log) W= 0, del_t=10^-2, g = 1.0", xaxis = :log, yaxis = :log)
+    plot!(t, array[2:end].-array[1], fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "L = $(L[i])", title = "Spread Plot (log-log) W= 0, del_t=10^-2, g = $(g[j])", xaxis = :log, yaxis = :log)
 end
 #array2 = load("C:/Users/Kyle/Desktop/julia/data/L_377_spread_W=0_0.05_400000_0-0.2/0.05_N=377^2_W=0_g=0.0.jld", "data")
 #plot!(t[j], array2, fmt = :png, legend = :bottomleft, xlabel = "time", ylabel = "<del r^2>", label = "g = 0", title = "Spread Plot (log-log) W= 0, del_t=20^-1, N = L^2= 377^2", xaxis = :log, yaxis = :log)
