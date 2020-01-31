@@ -166,6 +166,7 @@ end
 
 #evolves psi delt_t in time with the PE operator -TOOK OUT QUASIPERIODIC POTENTIAL W=0
 function time_step_V(array, del_t, g, L)
+    # array .= array.*interactions(g,array,del_t,L)
     array[:,:,1] = array[:,:,1].*interactions(g, array, del_t, L)
     array[:,:,2] = array[:,:,2].*interactions(g, array, del_t, L)
     return array
