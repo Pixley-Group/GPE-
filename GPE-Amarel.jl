@@ -18,8 +18,8 @@ fib(n) = n < 2 ? n : fib(n-1) + fib(n-2)
 
 #----Enter the starting parameters here
 # Write the guess wavefunction here
-function psi_guess(x,y)
-    return exp(-((x-45)^2) - ((y-45)^2))
+function psi_guess(x,y, L)
+    return exp(-((x-floor(Int,L/2))^2) - ((y-floor(Int, L/2))^2))
     #return (x-72)-((x-72)^2)+(x-72)^3
 end
 
@@ -38,10 +38,10 @@ end
 
 using LinearAlgebra, Statistics, Compat
 #generates the array that is the discretization of the guess function in real space
-function psi_guess_array(psi_guess_array, n)
-    for x in 1:n
-        for y in 1:n
-            psi_guess_array[x,y,1] = psi_guess(x,y)
+function psi_guess_array(psi_guess_array, L)
+    for x in 1:L
+        for y in 1:L
+            psi_guess_array[x,y,1] = psi_guess(x,y,L)
             psi_guess_array[x,y,2] = 0
         end
     end
@@ -160,16 +160,9 @@ function time_step_T(array,n, gen_array, spin_matrix)
     return gen_array
 end
 
-function interactions(g, array, del_t, L)
-    exp.(g*(L^2)*(-im*del_t)*(abs2(array[:,:1])+abs2(array[:,:,2])))
-end
-
 #evolves psi delt_t in time with the PE operator -TOOK OUT QUASIPERIODIC POTENTIAL W=0
 function time_step_V(array, del_t, g, L)
-    # array .= array.*interactions(g,array,del_t,L)
-    array[:,:,1] = array[:,:,1].*interactions(g, array, del_t, L)
-    array[:,:,2] = array[:,:,2].*interactions(g, array, del_t, L)
-    return array
+    return array .= array .*  exp.(g*(10^4)*(-im*del_t)*(abs2.(array[:,:,1]) + abs2.(array[:,:,2])))
 end
 
 using FFTW
@@ -200,14 +193,17 @@ end
 # end
 
 
-function time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
-
+function time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L, thin_fac)
+    return_array = [array]
     n_array = [array]
-
-    for i in 2:t
-        push!(n_array, time_evolve_step(n_array[i-1], del_t, spin_matrix, g, FFT, IFFT, L))
+    for j in 1:(Int(t/thin_fac))
+        for i in 2:thin_fac
+            push!(n_array, time_evolve_step(n_array[1], del_t, spin_matrix, g, FFT, IFFT, L))
+            deleteat!(n_array, 1)
+        end
+        push!(return_array, n_array[1])
     end
-    return n_array
+    return return_array
 end
 
 function spread_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
@@ -361,7 +357,7 @@ function main()
     rank = MPI.Comm_rank(comm)
     Nproc = MPI.Comm_size(comm)
 
-    data_amarel(500000, 89, rank, Nproc, (10^-2))
+    data_amarel(500000, 144, rank, Nproc, 0.01, 500)
 
     MPI.Finalize()
 end
@@ -381,19 +377,21 @@ end
     #end
 #end
 
-function data_amarel(t, L, rank, Nproc, del_t)
+function data_amarel(t, L, rank, Nproc, del_t, thin_fac)
 
-    x = [0,.2,.4,.6,.8,1]
-    #pot_matrix_QP = pot_array_QP(zeros(ComplexF64, L, L), 0, 0, 0, L, 233)
+    x = [0,-.2,-.4,-.6,-.8,-1]
+    #x = [2, 5, 10, 20]
+    #pot_matrix_QP = pot_array_QP(zeros(ComplexF64, L, L), 0, 0, 0, L, L)
     #pot_matrix_HO = pot_array_H_O(L, zeros(ComplexF64, L, L), 0, 0)
     spin_matrix = kin_spin_matrix(zeros(ComplexF64, L, L, 2, 2), L, del_t)
     FFT = init_FFT(L, 1:2)
     IFFT = init_IFFT(L, 1:2)
-    #time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
+    #array = time_evolve_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank+1], FFT, IFFT, L)
     #        spread_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L)
-    #        time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT)
-    array = (time_evolve_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank+1], FFT, IFFT))
-    save("/scratch/bomeisl/Spread_L_$(L)_W=0_$(del_t)_$(t)/L=$(L)_W=0_g=$(x[rank+1]).jld", "data", array)
+    #        time_evolve_fast(array, t, del_t, spin_matrix, g, FFT, IFFT, L, thin_fac)
+    array = time_evolve_fast(psi_guess_array(x_dummy(L), L), t, del_t, spin_matrix, x[rank+1], FFT, IFFT, L, thin_fac)
+    save("/scratch/bomeisl/Psi_L=$(L)_W=0_$(del_t)_$(t)/Psi_L=$(L)_W=0_g=$(x[rank+1])_L^2.jld", "data",array)
+    #Psi_L=233_W=0_0.01_100000
 end
 
 # function data(t)
