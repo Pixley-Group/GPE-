@@ -288,6 +288,28 @@ function functionize(psi, x, y, s)
     return real(dot(psi[x,y,s], psi[x,y,s]))
 end
 
+function g(g, del_t, array)
+    output = []
+    for i in 1:length(array)
+        push(output, g*del_t*(abs2.(array[i][:,:,1]) + abs2.(array[i][:,:,2])))
+    end
+end
+
+function Energy(array, T_array, L)
+    A(x,y,n) = sin(p_x(x,n)) - im*sin(p_y(y,n))
+    for x in 1:L
+        for y in 1:L
+            T_array[x,y,1,1] = 0
+            T_array[x,y,2,2] = 0
+            T_array[x,y,1,2] = A(x,y,n)
+            T_array[x,y,2,1] = conj(A(x,y,n))
+        end
+    end
+    T = dot(array.*T_array, array)
+    U = (g/2) * dot(array,array)
+    return T+U
+end
+
 # function pot_error(t)
 #
 #     n_array = [psi]

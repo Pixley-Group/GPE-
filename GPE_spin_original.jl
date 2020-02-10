@@ -118,21 +118,35 @@ end
 
 #generates the spin orbital coupling matrix
 
+#SOC KE MATRIX
+# function kin_spin_matrix(spin_couple_matrix, n, del_t)
+#     A(x,y,n) = sin(p_x(x,n)) - im*sin(p_y(y,n))
+#     for x in 1:n
+#         for y in 1:n
+#             spin_couple_matrix[x,y,1,1] = cos(abs(A(x,y,n)) * del_t/2)
+#             spin_couple_matrix[x,y,1,2] = -im*exp(im * angle(A(x,y,n))) * sin(abs(A(x,y,n)) * del_t/2)
+#             spin_couple_matrix[x,y,2,1] = -im*exp(-im * angle(A(x,y,n))) * sin(abs(A(x,y,n)) * del_t/2)
+#             spin_couple_matrix[x,y,2,2] = cos(abs(A(x,y,n)) * del_t/2)
+#         end
+#     end
+#     return spin_couple_matrix
+# end
 
-function kin_spin_matrix(spin_couple_matrix, n, del_t)
-    A(x,y,n) = sin(p_x(x,n)) - im*sin(p_y(y,n))
+#DECOUP KE MATRIX
+function kin_spin_matrix_decoup(spin_couple_matrix, n, del_t)
+    A(x,y,n) = -cos(p_x(x,n)) - cos(p_y(y,n))
     for x in 1:n
         for y in 1:n
-            spin_couple_matrix[x,y,1,1] = cos(abs(A(x,y,n)) * del_t/2)
-            spin_couple_matrix[x,y,1,2] = -im*exp(im * angle(A(x,y,n))) * sin(abs(A(x,y,n)) * del_t/2)
-            spin_couple_matrix[x,y,2,1] = -im*exp(-im * angle(A(x,y,n))) * sin(abs(A(x,y,n)) * del_t/2)
-            spin_couple_matrix[x,y,2,2] = cos(abs(A(x,y,n)) * del_t/2)
+            spin_couple_matrix[x,y,1,1] = exp(-im*A(x,y,n)*del_t/2)
+            spin_couple_matrix[x,y,1,2] = 0
+            spin_couple_matrix[x,y,2,1] = 0
+            spin_couple_matrix[x,y,2,2] = exp(-im*A(x,y,n)*del_t/2)
         end
     end
     return spin_couple_matrix
 end
 
-spin_matrix = kin_spin_matrix(zeros(ComplexF64, 233, 233, 2, 2), 233, (40^-1))
+spin_matrix = kin_spin_matrix_decoup(zeros(ComplexF64, 233, 233, 2, 2), 233, (40^-1))
 
 #exponentiates the harmonic oscilator pot energy operator elementwise
 function e_V(psi)
@@ -162,10 +176,8 @@ function interactions(g, array, del_t)
 end
 
 #evolves psi delt_t in time with the PE operator
-function time_step_V(array, del_t, pot_matrix_QP, pot_matrix_HO, g)
-    array[:,:,1] = exp.(((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, del_t).*array[:,:,1])
-    array[:,:,2] = exp.(((-im*del_t)*(pot_matrix_QP)).*interactions(g, array, del_t).*array[:,:,2])
-    return array
+function time_step_V(array, del_t, g, L)
+    return array .= array .* exp.(g*(10^4)*(-im*del_t)*(abs2.(array[:,:,1]) + abs2.(array[:,:,2])))
 end
 
 using FFTW
@@ -236,13 +248,7 @@ function T_step(array, gen_array,n)
     return gen_array
 end
 
-#Finds the energy of psi
-function Energy(array)
-    k_array = init_FFT(zeros(ComplexF64, 233, 233, 2), 1:2)*array
-    kin = expec_value(k_array, kin_spin_matrix)
-    pot = expec_value(array, pot_matrix_QP)
-    return pot + kin
-end
+#Finds the en
 
 #spread auxillary functions
 
@@ -274,9 +280,9 @@ function y_array(y_array, n)
 end
 
 
-r_2_matrix = r_2_array(zeros(233, 233), 233)
-x_matrix = x_array(zeros(233, 233), 233)
-y_matrix = y_array(zeros(233, 233), 233)
+r_2_matrix = r_2_array(zeros(89, 89), 89)
+x_matrix = x_array(zeros(89, 89), 89)
+y_matrix = y_array(zeros(89, 89), 89)
 
 function expec_value(array, thing)
     return real(sum(conj(array[:,:,1]).*(thing.*array[:,:,1]))) + real(sum(conj(array[:,:,2]).*(thing.*array[:,:,2])))
@@ -301,6 +307,47 @@ function pot_error(t)
     return n_array
 end
 
+function Norm(array)
+    return dot(array,array)
+end
+
+function g(g, del_t, array)
+    output = []
+    for i in 1:length(array)
+        push!(output, g*del_t*(abs2.(array[i][:,:,1]) + abs2.(array[i][:,:,2])))
+    end
+    return output
+end
+
+function T_array(T_array, L)
+    A(x,y,L) = sin(p_x(x,L)) + im*sin(p_y(y,L))
+    for x in 1:L
+        for y in 1:L
+            T_array[x,y,1] = A(x,y,L)
+            T_array[x,y,2] = conj(A(x,y,L))
+        end
+    end
+    return T_array
+end
+
+function Energy(array, T_array, L, g, FFT)
+    T = round(dot((FFT*array), T_array.*(FFT*array)), digits = 6)
+    U = (g/2) * dot(array,array)
+    return(T+U)
+end
+
+#Energy(load("C:/Users/Kyle/Desktop/julia/data/Psi_L=89_W=0_0.01_100000_DECOUP/Psi_L=89_W=0_g=100_DECOUP.jld", "data")[100], T_array(zeros(89,89,2), 89), 89, 100)
+
+function Energy_Plot(array, L)
+    Enerray = []
+    for i in 1:length(array)
+        push!(Enerray, round(real(Energy(array[i], T_array(zeros(ComplexF64,L,L,2), L), L, 1, init_FFT(L, 1:2))), digits = 6))
+    end
+    plot((1:1001), Enerray, title = "Energy(t) SOC, g = 100, L=144")
+end
+
+
+Energy_Plot(load("C:/Users/Kyle/Desktop/julia/data/Psi_L=233_W=0_0.01_100000-100_g1/Psi_L=144_W=0_g=100.jld", "data"), 144)
 #DIRECT INTEGRATION FUNCTIONS__________________________________________________
 
 #Buildss the Hamiltonian-------------------------------------------
@@ -327,8 +374,8 @@ function psi_guess_array_dir(psi_guess_array, n)
     return normalizer(psi_guess_array)
 end
 
-x_dummy = zeros(ComplexF64, 233, 233, 2)
-psi_k_ = FFT*psi_guess_array_dir(x_dummy, 233)
+# x_dummy = zeros(ComplexF64, 233, 233, 2)
+# psi_k_ = FFT*psi_guess_array_dir(x_dummy, 233)
 
 
 function psi_k_t(array, n, t)
@@ -361,9 +408,9 @@ end
 using DataFrames
 using GLM
 function Plotter(t)
-    x = (1:t)/40
-    pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 233, 233), 0.1, 0, 0, 233, 89)
-    pot_matrix_HO = pot_array_H_O(233, zeros(ComplexF64, 233, 233), 0, 0)
+    # x = (1:t)/40
+    # pot_matrix_QP = pot_array_QP(zeros(ComplexF64, 233, 233), 0.1, 0, 0, 233, 89)
+    # pot_matrix_HO = pot_array_H_O(233, zeros(ComplexF64, 233, 233), 0, 0)
     array = spread.(time_evolve_fast(psi_guess_array(x_dummy, 233), t, 40^-1,  pot_matrix_QP, pot_matrix_HO, 0))
     plot(x, array, xaxis = :log, yaxis = :log)
     #data = DataFrame(A = x[400:t], B = array[400:t])
@@ -375,7 +422,6 @@ function Plotter(t)
     #     plot!(t, array, xaxis = :log, yaxis = :log)
     # end
 end
-
 using JLD
 
 function data_amarel(t)
@@ -436,11 +482,6 @@ function spread(i)
     plot!(t, array2, xaxis = :log, yaxis = :log)
 end
 
-function Norm(array)
-    return dot(array,array)
-end
-
-
 
 
 using Plots
@@ -450,15 +491,19 @@ using LinearAlgebra
 #pygui(true)
 #.54,.56,.6,.65,.7,.75,.8,.85,.9
 function spread_data()
-    y = ["20^-1", "40^-1", "10^-2", "20^-2"]
-    x = ['1', '2', '3', '4']
-    t = [(1:20000)/20,(1:40000)/40, (1:100000)/100, (1:200000)/200]
-    for i in 1:4
-        array = load("C:/Users/Kyle/Desktop/julia/data/Spread_L=233_N=1_W=0_$(y[i])/$(y[i])_N=1_W=0_g=0.2.jld", "data")
-        t = t[i]
-        plot!(array, fmt = :png, xlabel = "iterations", ylabel = "<del r^2>", label = "$(y[i])", title = "Spread Plot (log-log) del_t=20^-1", xaxis = :log, yaxis = :log)
+    #g = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    g = [0.0, 1.0, 10.0, 100.0, 1000.0, 10000.0]
+    d = [0.01, 0.001]
+    t = (1:300000)/1000
+    for i in 1:3
+        for j in 1:2
+            array = load("C:/Users/Kyle/Desktop/julia/data/Spread_L=233_W=0_$(d[j])_300000_DECOUP/Psi_L=233_W=0_g=$(g[i])_DECOUP.jld", "data")
+            plot!(t, array, fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "$(g[i])", title = "Spread Plot - No SOC (log-log) L = 233, del_t = $(d[j])", xaxis = :log, yaxis = :log)
+        end
     end
 end
+
+#spread_data()
 
 function E_Plot(t, mu)
     pyplot()
@@ -550,24 +595,24 @@ end
 using Plots
 using JLD
 #y = ["20^-1", "40^-1", "10^-2", "20^-2", "40^-2"]
-t = (1:499999)/100
-f = [20, 40, 100, 200, 400]
+# t = (1:499999)/100
+# f = [20, 40, 100, 200, 400]
+#
+# g = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+# j = 3
+#
+# L = [89,144,233]
 
-g = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-j = 3
 
-L = [89,144,233]
-
-plot()
-for i in 1:3
-    array = load("C:/Users/Kyle/Desktop/julia/data/Spread_L=$(L[i])_W=0_0.01_500000/L=$(L[i])_W=0_g=$(g[j]).jld", "data")
-    #array2 = load("C:/Users/Kyle/Desktop/julia/data/L=144_N=144_W=0_20^-1/20^-1_N=144^2_W=0_g=0.0.jld", "data")
-    println(array[1])
-    plot!(t, array[2:end].-array[1], fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "L = $(L[i])", title = "Spread Plot (log-log) W= 0, del_t=10^-2, g = $(g[j])", xaxis = :log, yaxis = :log)
-end
+# for i in 1:3
+#     array = load("C:/Users/Kyle/Desktop/julia/data/Spread_L=$(L[i])_W=0_0.01_500000/L=$(L[i])_W=0_g=$(g[j]).jld", "data")
+#     #array2 = load("C:/Users/Kyle/Desktop/julia/data/L=144_N=144_W=0_20^-1/20^-1_N=144^2_W=0_g=0.0.jld", "data")
+#     println(array[1])
+#     plot!(t, array[2:end].-array[1], fmt = :png, legend = :topleft, xlabel = "time", ylabel = "<del r^2>", label = "L = $(L[i])", title = "Spread Plot (log-log) W= 0, del_t=10^-2, g = $(g[j])", xaxis = :log, yaxis = :log)
+# end
 #array2 = load("C:/Users/Kyle/Desktop/julia/data/L_377_spread_W=0_0.05_400000_0-0.2/0.05_N=377^2_W=0_g=0.0.jld", "data")
 #plot!(t[j], array2, fmt = :png, legend = :bottomleft, xlabel = "time", ylabel = "<del r^2>", label = "g = 0", title = "Spread Plot (log-log) W= 0, del_t=20^-1, N = L^2= 377^2", xaxis = :log, yaxis = :log)
-plot!()
+#plot!()
 #data_frame = DataFrame(A = t[j][400*f[j]:2500*f[j]], B = array[400*f[j]:2500*f[j]])
 #linear = glm(@formula(B ~ A), data_frame, Normal(), IdentityLink())
 #m = coef(linear)[2]
@@ -575,3 +620,32 @@ plot!()
 # plot!(t[j][1000:10000*f[j]], ((t[j][1000:10000*f[j]]*exp(b/m)).^m) , label = "2/z = $(m)", legend = :topleft)
 #plot!(t[j][3000:10000*f[j]], (t[j][3000:10000*f[j]].*m.+b), label = "2/z = $(m)", legend = :topleft)
 #---
+
+
+
+function g_anim(L, g)
+    array = load("C:/Users/Kyle/Desktop/julia/data/Psi_L=$(L)_W=0_0.01_100000_DECOUP/Psi_L=$(L)_W=0_g=$(g)_DECOUP.jld", "data")
+    @gif for i=1:1001
+        x=1:L
+        y=1:L
+        f(x,y) = array[i][x,y]
+        plot(x,y,f,st=:surface,camera=(0,30), title = "Interaction Exponent, L=$(L), g = $(g), t = $(i) ", zlabel = "Interaction Exponent")
+
+    end
+end
+
+# anim = @animate for i in 1:6
+#     array_2 = abs2.(array[i][:,:,1])
+#     x=1:89
+#     y=1:89
+#     f(x,y) = array_2[x,y]
+#     plot(x,y,f,st=:surface,camera=(0,30), title = "Wavefunction Density Animation, L=89", zlabel = "psi^2")
+# end
+array = load("C:/Users/Kyle/Desktop/julia/data/Psi_L=89_W=0_0.001_300000_10-4/Psi_L=89_W=0_g=1.0_10^4.jld", "data")
+@gif for i=1:1001
+    array_2 = abs2.(array[i][:,:,1]) + abs2.(array[i][:,:,2])
+    x=1:89
+    y=1:89
+    f(x,y) = array_2[x,y]
+    plot(x,y,f,st=:surface,camera=(0,30), title = "Wavefunction Density (SOC), L=89, g=0, del_t = 0.001 t = $(i)")
+end
