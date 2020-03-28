@@ -346,6 +346,17 @@ function Energy_Plot(array, L)
     plot((1:1001), Enerray, title = "Energy(t) SOC, g = 100, L=144")
 end
 
+function PR(psi)
+    sum = 0
+    L = size(psi,1)
+    for x in 1:L
+        for y in 1:L
+            sum += conj(psi[x,y,1])*psi[x,y,1] + conj(psi[x,y,2])*psi[x,y,2]
+        end
+    end
+    return sum^2
+end
+
 
 Energy_Plot(load("C:/Users/Kyle/Desktop/julia/data/Psi_L=233_W=0_0.01_100000-100_g1/Psi_L=144_W=0_g=100.jld", "data"), 144)
 #DIRECT INTEGRATION FUNCTIONS__________________________________________________
