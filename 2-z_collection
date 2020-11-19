@@ -1,0 +1,31 @@
+ts = (1:300000)/2000
+g = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0]
+W = [0.2, 0.3, 0.4, 0.42, 0.44, 0.46, 0.48, 0.5, 0.52, 0.53, 0.54, 0.56, 0.57, 0.58, 0.59, 0.6, 0.62, 0.7, 0.8, 0.9, 1.1, 1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.3, 2.4, 2.6, 2.7, 2.8, 2.9, 2.0, 3.1, 3.2]
+# z = [1.5575300149357008, 1.5071157309815375, 1.4448835127257438, 1.3860534299931815, 1.3437061600293265, 1.3176765345698893, 1.306812682837727, 1.3058177759075396, 1.3029135192059917, 1.2996989870547695, 1.2987002600528104, 1.3001530062737972, 1.302703142790495, 1.3050689813897407, 1.3068742606074202, 1.3082064618523188, 1.3091808062735262, 1.309982546132545, 1.3107464201330647, 1.3115589736605522, 1.3125907181781797]
+using Plots
+using JLD
+using GLM
+using DataFrames
+
+mat = zeros(Float64, length(g), length(W))
+
+function data_miner()
+
+      for i=1:length(g)
+            for j=1:length(W)
+                  array = real(load("/home/kyle/GPE-Data/9-30-20/Spread_L=89_g=$(g[i])_W=$(W[j])_gauss-1_avg_SOC.jld", "data"))
+                  array_ = array .- array[1]
+                  datas = DataFrame(A = ts[100000:299997], B = array_[100000:299997])
+                  linear = glm(@formula(log(B) ~ log(A)), datas, Normal(), IdentityLink())
+                  m = coef(linear)[2]
+                  b = coef(linear)[1]
+                  #plot(ts[2:299997], array[2:299997], xaxis = :log, yaxis = :log, label = "<\\delta^{2}>", title = "2/z Linear Fit L=89; g=$(g[i]) W=$(W[j])", linestyle = :dash, legend = :bottomright, size = (1200, 1000), titlefontsize= 20 , tickfontsize = 17, legendfontsize = 17, guidefontsize = 17)
+                  #plot!(ts, (exp(b)*(ts).^m), xaxis = :log, yaxis = :log, label = " slope = $(m)", linestyle = :dash,size = (1200, 1000), titlefontsize= 20 , tickfontsize = 17, legendfontsize = 17, guidefontsize = 17)
+                  mat[i,j] = m
+
+            end
+      end
+      save("/home/kyle/GPE-Data/10-31-20/Spread_2-z.jld", "data", mat)
+end
+
+data_miner()
